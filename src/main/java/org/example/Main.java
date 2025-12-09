@@ -1,35 +1,38 @@
 package org.example;
 
-import com.jogamp.opengl.GLCapabilities;
-import com.jogamp.opengl.GLProfile;
-import com.jogamp.opengl.awt.GLCanvas;
-import com.jogamp.opengl.util.FPSAnimator;
+import com.jogamp.newt.opengl.GLWindow;
+import com.jogamp.newt.event.WindowAdapter;
+import com.jogamp.opengl.*;
 
-import java.awt.Frame;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
+import com.jogamp.opengl.util.FPSAnimator;
 
 public class Main {
     public static void main(String[] args) {
-        GLProfile glp = GLProfile.getDefault();
+
+        GLProfile.initSingleton();
+        GLProfile glp = GLProfile.get(GLProfile.GL2);
+
         GLCapabilities caps = new GLCapabilities(glp);
-        GLCanvas canvas = new GLCanvas(caps);
+        caps.setDoubleBuffered(true);
+        caps.setHardwareAccelerated(true);
 
-        Frame frame = new Frame("Color Switch Clone");
-        frame.setSize(400, 800);
-        frame.add(canvas);
-        frame.setVisible(true);
+        // NEWT window instead of AWT Frame + GLCanvas
+        GLWindow window = GLWindow.create(caps);
+        window.setTitle("Color Switch Clone");
+        window.setSize(400, 800);
+        window.setVisible(true);
 
-        frame.addWindowListener(new WindowAdapter() {
-            public void windowClosing(WindowEvent e) {
+        Game game = new Game(window);
+        window.addGLEventListener(game);
+
+        FPSAnimator animator = new FPSAnimator(window, 60);
+        animator.start();
+
+        window.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowDestroyNotify(com.jogamp.newt.event.WindowEvent e) {
                 System.exit(0);
             }
         });
-
-        Game game = new Game(canvas);
-        canvas.addGLEventListener(game);
-
-        FPSAnimator animator = new FPSAnimator(canvas, 60);
-        animator.start();
     }
 }

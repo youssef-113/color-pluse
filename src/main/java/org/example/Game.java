@@ -3,126 +3,116 @@ package org.example;
 import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLEventListener;
-import com.jogamp.opengl.awt.GLCanvas;
 
-import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 public class Game implements GLEventListener {
-    // Game constants
     private static final float GRAVITY = -0.015f;
     private static final float JUMP_VELOCITY = 0.3f;
-    private static final float BASE_RING_SPACING = 20.0f; // Increased spacing between rings
+    private static final float BASE_RING_SPACING = 20.0f;
 
-    // Game objects
     private PlayerBall playerBall;
     private List<Ring> rings;
     private List<ColorChanger> colorChangers;
     private BackgroundStars backgroundStars;
 
-    // Game state
     private int score;
     private boolean isGameOver;
+    private boolean gameOverNotified = false;
+    private boolean hasPressedSpace = false;
     private final Random random = new Random();
 
-    // Rendering
-    private final GLCanvas canvas;
+    private GameStateListener gameStateListener;
 
-    // Camera/World bounds for background
     private float worldMinX = -10f;
     private float worldMaxX = 10f;
     private float worldMinY = -20f;
     private float worldMaxY = 20f;
     private float cameraOffsetY = 0f;
 
-    public Game(GLCanvas canvas) {
-        this.canvas = canvas;
+    public Game(Object window) {
+        // window parameter is now ignored (for compatibility with GLJPanel)
+    }
+
+    public void setGameStateListener(GameStateListener listener) {
+        this.gameStateListener = listener;
+    }
+
+    public void handleKeyPress(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.VK_SPACE:
+                if (isGameOver) resetGame();
+                else {
+                    hasPressedSpace = true;
+                    playerBall.jump(JUMP_VELOCITY);
+                }
+                break;
+            case KeyEvent.VK_ESCAPE:
+                if (gameStateListener != null) {
+                    gameStateListener.onGameExit();
+                }
+                break;
+        }
+    }
+
+    public int getScore() {
+        return score;
+    }
+
+    public boolean isGameOver() {
+        return isGameOver;
+    }
+
+    public void resetGamePublic() {
+        resetGame();
     }
 
     @Override
     public void init(GLAutoDrawable drawable) {
         GL2 gl = drawable.getGL().getGL2();
-        // Dark space background (near black with slight blue tint)
         gl.glClearColor(0.02f, 0.03f, 0.08f, 1.0f);
 
-        // Initialize background stars
         backgroundStars = new BackgroundStars(worldMinX, worldMaxX, worldMinY, worldMaxY);
-
         resetGame();
-        setupKeyListeners();
-    }
-
-    private void setupOrthographicProjection(GL2 gl, int width, int height) {
-        gl.glMatrixMode(GL2.GL_PROJECTION);
-        gl.glLoadIdentity();
-        gl.glOrtho(-10, 10, -10 * (float) height / width, 10 * (float) height / width, -1, 1);
-        gl.glMatrixMode(GL2.GL_MODELVIEW);
-        gl.glLoadIdentity();
     }
 
     private void resetGame() {
-        playerBall = new PlayerBall(-8, 0.5f); // Start ball much lower to avoid initial collision
+        playerBall = new PlayerBall(-8, 0.5f);
         rings = new ArrayList<>();
         colorChangers = new ArrayList<>();
         score = 0;
         isGameOver = false;
-        cameraOffsetY = 0f; // Reset camera offset
+        gameOverNotified = false;
+        hasPressedSpace = false;
+        cameraOffsetY = 0f;
         spawnInitialRings();
     }
 
     private void spawnInitialRings() {
-        // Spawn first ring well above the player (at y=5.0f when player is at y=-8)
         spawnRing(5.0f);
-        // Spawn subsequent rings with proper spacing
         for (int i = 1; i < 3; i++) {
             float lastRingY = rings.get(rings.size() - 1).getY();
-            float spacing = BASE_RING_SPACING + random.nextFloat() * 4.0f; // 12-16 units spacing
+            float spacing = BASE_RING_SPACING + random.nextFloat() * 4.0f;
             spawnRing(lastRingY + spacing);
         }
     }
 
     private void spawnRing(float y) {
-        // Varied ring sizes - outer radius between 3.5 and 6.5
         float outerRadius = 3.5f + random.nextFloat() * 3.0f;
-        float thickness = 0.8f + random.nextFloat() * 0.7f; // Thickness between 0.8 and 1.5
+        float thickness = 0.8f + random.nextFloat() * 0.7f;
         float innerRadius = outerRadius - thickness;
-
-        // Rotation speed inversely proportional to size
-        // Larger rings rotate slower, smaller rings rotate faster
         float baseSpeed = 1.5f;
-        float rotationSpeed = baseSpeed * (4.5f / outerRadius); // Speed factor based on radius
-        rotationSpeed *= (random.nextBoolean() ? 1 : -1); // Random direction
+        float rotationSpeed = baseSpeed * (4.5f / outerRadius) * (random.nextBoolean() ? 1 : -1);
 
         rings.add(new Ring(y, innerRadius, outerRadius, rotationSpeed));
 
-        // Spawn a color changer occasionally between rings
         if (random.nextFloat() > 0.6f) {
             float colorChangerY = y + (BASE_RING_SPACING / 2);
             colorChangers.add(new ColorChanger(0, colorChangerY, 0.35f));
         }
-    }
-
-    private void setupKeyListeners() {
-        canvas.addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_SPACE) {
-                    if (isGameOver) {
-                        resetGame();
-                    } else {
-                        playerBall.jump(JUMP_VELOCITY);
-                    }
-                }
-                if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-                    System.exit(0);
-                }
-            }
-        });
-        // Request focus for the canvas to receive key events.
-        canvas.requestFocusInWindow();
     }
 
     @Override
@@ -136,6 +126,20 @@ public class Game implements GLEventListener {
 
         update();
         render(gl);
+
+        // Notify when game is over (only once)
+        if (isGameOver && !gameOverNotified && gameStateListener != null) {
+            gameOverNotified = true;
+            gameStateListener.onGameExit();
+        }
+    }
+
+    private void setupOrthographicProjection(GL2 gl, int width, int height) {
+        gl.glMatrixMode(GL2.GL_PROJECTION);
+        gl.glLoadIdentity();
+        gl.glOrtho(-10, 10, -10 * (float) height / width, 10 * (float) height / width, -1, 1);
+        gl.glMatrixMode(GL2.GL_MODELVIEW);
+        gl.glLoadIdentity();
     }
 
     private void update() {
@@ -144,35 +148,24 @@ public class Game implements GLEventListener {
         playerBall.applyGravity(GRAVITY);
         playerBall.update();
 
-        // Update background stars
-        if (backgroundStars != null) {
-            backgroundStars.update(0); // Stars fall on their own, not affected by camera
-        }
+        if (backgroundStars != null) backgroundStars.update(0);
 
-        // Move camera (world) down to follow the ball
         if (playerBall.getY() > 0) {
             float dy = playerBall.getY();
             playerBall.setY(0);
-            cameraOffsetY += dy; // Track camera offset for background
-            for (Ring ring : rings) {
-                ring.setY(ring.getY() - dy);
-            }
-            for (ColorChanger changer : colorChangers) {
-                changer.setY(changer.getY() - dy);
-            }
+            cameraOffsetY += dy;
+            rings.forEach(r -> r.setY(r.getY() - dy));
+            colorChangers.forEach(c -> c.setY(c.getY() - dy));
         }
 
-        // Check for collisions
-        checkCollisions();
-
-        // Update rings
+        if (hasPressedSpace) {
+            checkCollisions();
+        }
         rings.forEach(Ring::update);
 
-        // Remove off-screen elements and spawn new ones
-        rings.removeIf(ring -> ring.getY() < -20);
-        colorChangers.removeIf(changer -> changer.getY() < -20);
+        rings.removeIf(r -> r.getY() < -20);
+        colorChangers.removeIf(c -> c.getY() < -20);
 
-        // Spawn new ring when the last one is getting close
         if (!rings.isEmpty() && rings.get(rings.size() - 1).getY() < 15) {
             float lastRingY = rings.get(rings.size() - 1).getY();
             float spacing = BASE_RING_SPACING + random.nextFloat() * 4.0f;
@@ -181,7 +174,7 @@ public class Game implements GLEventListener {
     }
 
     private void checkCollisions() {
-        // Ring collision
+        // Ring collision - direct ring hit check like the template
         for (Ring ring : rings) {
             if (playerBall.isCollidingWithRing(ring)) {
                 int segment = ring.getSegmentAtAngle(playerBall.getX(), playerBall.getY());
@@ -200,32 +193,19 @@ public class Game implements GLEventListener {
         colorChangers.forEach(changer -> {
             if (changer.isColliding(playerBall)) {
                 playerBall.changeColor();
-                changer.setY(-20); // "Remove" it
+                changer.setY(-20);
             }
         });
 
         // Out of bounds
-        if (playerBall.getY() < -12) {
-            isGameOver = true;
-        }
+        if (playerBall.getY() < -12) isGameOver = true;
     }
 
     private void render(GL2 gl) {
-        // Render background stars first (behind everything)
-        if (backgroundStars != null) {
-            backgroundStars.draw(gl);
-        }
-
-        // Render game objects
+        if (backgroundStars != null) backgroundStars.draw(gl);
         playerBall.draw(gl);
-        rings.forEach(ring -> ring.draw(gl));
-        colorChangers.forEach(changer -> changer.draw(gl));
-
-        if (isGameOver) {
-            // Simple "Game Over" text would require a text renderer, which is complex.
-            // For now, we just freeze the screen and wait for space to restart.
-            // A title change could indicate status.
-        }
+        rings.forEach(r -> r.draw(gl));
+        colorChangers.forEach(c -> c.draw(gl));
     }
 
     @Override
@@ -234,12 +214,9 @@ public class Game implements GLEventListener {
         gl.glViewport(0, 0, width, height);
         setupOrthographicProjection(gl, width, height);
 
-        // Update world bounds for background stars
         worldMaxY = 10 * (float) height / width;
         worldMinY = -worldMaxY;
-        if (backgroundStars != null) {
-            backgroundStars.updateBounds(worldMinX, worldMaxX, worldMinY, worldMaxY);
-        }
+        if (backgroundStars != null) backgroundStars.updateBounds(worldMinX, worldMaxX, worldMinY, worldMaxY);
     }
 }
-
+ 
