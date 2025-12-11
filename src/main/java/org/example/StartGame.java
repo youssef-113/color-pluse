@@ -29,6 +29,7 @@ public class StartGame {
         mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         mainFrame.setSize(800, 800);
         mainFrame.setLocationRelativeTo(null);
+        mainFrame.setResizable(true);
 
         // Create card layout for screen transitions
         cardLayout = new CardLayout();

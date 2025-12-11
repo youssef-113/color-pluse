@@ -66,6 +66,7 @@ public class PlayerBall {
     public void setY(float y) { this.y = y; }
     public float getRadius() { return radius; }
     public int getColorIndex() { return colorIndex; }
+    public void setVelocityY(float v) { this.velocityY = v; }
 
     public boolean isCollidingWithRing(Ring ring) {
         float dist = (float) Math.sqrt(Math.pow(x - 0, 2) + Math.pow(y - ring.getY(), 2));
